@@ -2,11 +2,41 @@ import { createServer } from 'https';
 import { readFileSync } from 'fs';
 import { WebSocketServer } from 'ws';
 import { createSocket } from 'dgram';
+import { networkInterfaces } from 'os';
 
+//start with 
+//	nodejs oscWebSocketServer.js "Wi-Fi"
+//
 var PORT = 8000, udpPORT = 5454;
-var HOST = '127.0.0.1', udpHOST = '192.168.1.111';	//set this to your PCs local LAN address that you want to TX OSC to
+var HOST = '127.0.0.1', udpHOST = '192.168.1.113';	//set this to your PCs local LAN address that you want to TX OSC to
 var udpServer = createSocket('udp4');
 var globalWS, wsOn=0;
+const nets = networkInterfaces();
+const results = Object.create(null);
+
+getLocalIP();
+
+function getLocalIP()
+{
+	for (const name of Object.keys(nets)) 
+	{
+		for (const net of nets[name]) 
+		{
+			// Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+			// 'IPv4' is in Node <= 17, from 18 it's a number 4 or 6
+			const familyV4Value = typeof net.family === 'string' ? 'IPv4' : 4
+			if (net.family === familyV4Value && !net.internal) 
+			{
+				if (!results[name]) {
+					results[name] = [];
+				}
+				results[name].push(net.address);
+			}
+		}
+	}
+	console.log("\r\nLocal IP address of ["+process.argv[2]+"]\t["+results[process.argv[2]][0]+"]");
+	udpHOST = results[process.argv[2]][0];
+}
 
 const server = createServer({
   cert: readFileSync('./certs/cert.pem'),
@@ -114,3 +144,5 @@ function countNumberOfValues(needle, haystack, startPos)
 
 udpServer.bind(udpPORT, udpHOST);
 server.listen(PORT, HOST);
+
+
