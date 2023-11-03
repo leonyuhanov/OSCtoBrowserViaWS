@@ -1,0 +1,132 @@
+<html>
+<title>OSC via Web Socket Demo</title>
+
+<style>
+</style>
+
+<body onload="setUp()">
+
+<div id='mainDiv'>
+</div>
+
+</body>
+<script src="MIDIMapper.js"></script>
+<script language="JavaScript">
+
+//Midi vars
+let MIDISTore = new MIDIMapper();
+
+//Global WebSocket object
+var wsObject;
+
+function setUp()
+{
+	//Init web MIDI
+	navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+	
+	//Add MIDI/OSC controls
+	MIDISTore.addItem(176,1,"fader1", 100);
+	MIDISTore.setValue("fader1", 0)
+	
+	//Init the web socket connection to the bridge
+	initWebSockets();
+}
+
+//-------------MIDI FUNCTIONS--------------------------
+function onMIDISuccess(midiAccess)
+{
+    console.log(midiAccess);
+
+    var inputs = midiAccess.inputs;
+    var outputs = midiAccess.outputs;
+	
+	for(var input of midiAccess.inputs.values())
+	{
+        input.onmidimessage = getMIDIMessage;
+    }
+}
+function onMIDIFailure()
+{
+    console.log('Could not access your MIDI devices.');
+}
+function getMIDIMessage(midiMessage) 
+{
+	//console.log(midiMessage.data[0]+" "+midiMessage.data[1]+" "+midiMessage.data[2]);
+	MIDISTore.onMidiEvent(midiMessage)
+}
+//-------------MIDI FUNCTIONS--------------------------
+
+function initWebSockets()
+{
+	wsObject = new WebSocket("wss://localhost:8000");
+	
+	wsObject.onopen = function()
+	{
+		wsObject.send("HELLO_FROM_CLIENT");
+	};
+
+	wsObject.onclose = function()
+	{
+	};
+
+	wsObject.onmessage = function(event)
+	{
+		handleOSCEvent(event.data);
+	};
+}
+
+
+function handleOSCEvent(data)
+{
+	var currValue = 0, numberOfValues=0;
+	var currControl = "";
+	var valIndex=0, valCounter=0;
+
+	console.log("["+data+"]");
+	
+	currControl = data.substr(0, findNeedle(',', data, 0));
+	numberOfValues = data.substr(findNeedle(',', data, 0)+1, (findNeedle(',', data, 1))-(findNeedle(',', data, 0)+1) );
+	valueArray = new Array(numberOfValues);
+	for(valCounter=0; valCounter<numberOfValues; valCounter++)
+	{
+		valIndex = findNeedle(',', data, 1+valCounter)+1;
+		if(valCounter+1<numberOfValues)
+		{
+			valueArray[valCounter] = data.substr(valIndex, findNeedle(',', data, 1+(valCounter+1))-valIndex);
+			console.log("more Value["+valCounter+"]["+valueArray[valCounter]+"]");
+		}
+		else
+		{
+			valueArray[valCounter] = data.substr(valIndex, data.length-valIndex);
+			console.log("last Value["+valCounter+"]["+valueArray[valCounter]+"]");
+		}
+	}
+	currValue = valueArray[numberOfValues-1];
+	console.log("Contol Name["+currControl+"]\tNumber Of Values["+numberOfValues+"]\tLastValue["+currValue+"]");
+	MIDISTore.setMidiValue(currControl, currValue*127);
+	MIDISTore.setMultiValues(currControl, valueArray);
+	console.log(MIDISTore.getValue(currControl));
+	//update the div for the Demo
+	document.getElementById("mainDiv").innerHTML = "Contol Name["+currControl+"]\tNumber Of Values["+numberOfValues+"]\tLastValue["+currValue+"]";
+}
+
+function findNeedle(needle, haystack, needleCount)
+{
+	var aIndex=0, nCount=0;
+	
+	for(aIndex=0; aIndex<haystack.length; aIndex++)
+	{
+		if(haystack[aIndex]==needle && nCount==needleCount)
+		{
+			return aIndex;
+		}
+		else if(haystack[aIndex]==needle && nCount<needleCount)
+		{
+			nCount++;
+		}
+	}
+	return -1;
+}
+
+</script>
+</html>
